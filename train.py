@@ -19,7 +19,7 @@ def main():
     lr = 0.001
     batchsize = 1
     n_workers = 0  # Set number of workers to 0 to avoid multiprocessing conflicts
-    epochs = 20
+    epochs = 100
 
     # Check if correct number of arguments are provided
     if len(sys.argv) != 3:
