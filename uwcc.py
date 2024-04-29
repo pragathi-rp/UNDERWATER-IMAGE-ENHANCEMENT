@@ -18,9 +18,9 @@ def get_imgs_list(ori_dirs, ucc_dirs):
 
     return img_list
 
-class uwcc(data.Dataset):
+class UWCCDataset(data.Dataset):
     def __init__(self, ori_dirs, ucc_dirs, train=True, loader=img_loader):
-        super(uwcc, self).__init__()
+        super(UWCCDataset, self).__init__()  # Fix the class name here
 
         self.img_list = get_imgs_list(ori_dirs, ucc_dirs)
         if len(self.img_list) == 0:
@@ -40,9 +40,6 @@ class uwcc(data.Dataset):
 
         if self.train:
             oritransform = transforms.Compose([
-                # transforms.RandomResizedCrop(256, scale=(0.5, 1.0)),
-                # transforms.RandomHorizontalFlip(),
-                # transforms.RandomVerticalFlip(),
                 transforms.ToTensor(),
             ])
             ucctransform = transforms.Compose([
