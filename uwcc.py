@@ -18,7 +18,7 @@ def get_imgs_list(ori_dirs, ucc_dirs):
 
     return img_list
 
-class UWCCDataset(data.Dataset):
+class uwcc(data.Dataset):
     def __init__(self, ori_dirs, ucc_dirs, train=True, loader=img_loader):
         super(UWCCDataset, self).__init__()  # Fix the class name here
 
