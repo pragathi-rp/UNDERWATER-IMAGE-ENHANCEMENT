@@ -1,39 +1,45 @@
+import os
 import torch
 import numpy as np
 import torch.nn as nn
 from torchvision import transforms
-
-from model import PhysicalNN
-from uwcc import uwcc
-import shutil
-import os
 from torch.utils.data import DataLoader
+import shutil
 import sys
+import datetime
+from model import PhysicalNN
+from uwcc import UWCCDataset
 
-# Set start method for multiprocessing to "spawn" to avoid conflicts with multithreading
-torch.multiprocessing.set_start_method("spawn")
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # Use GPU if available, otherwise use CPU
 
+# Set multiprocessing start method if not already set
+if not torch.multiprocessing.get_start_method(allow_none=True):
+    torch.multiprocessing.set_start_method("spawn")
 def main():
-    best_loss = 9999.0
+
+    best_loss = float('inf')
 
     lr = 0.001
-    batchsize = 1
-    n_workers = 0  # Set number of workers to 0 to avoid multiprocessing conflicts
-    epochs = 100
-
-    # Check if correct number of arguments are provided
-    if len(sys.argv) != 3:
-        print("Usage: python train.py TRAIN_RAW_IMAGE_FOLDER TRAIN_REFERENCE_IMAGE_FOLDER")
-        return
-
+    batch_size = 16  # Adjust as needed
+    num_workers = 2  # Adjust to recommended maximum
+    epochs = 50
     ori_fd = sys.argv[1]
     ucc_fd = sys.argv[2]
-
     ori_dirs = [os.path.join(ori_fd, f) for f in os.listdir(ori_fd)]
     ucc_dirs = [os.path.join(ucc_fd, f) for f in os.listdir(ucc_fd)]
 
+    # Print out directories for debugging
+    print("Original directories:", ori_dirs)
+    print("Corrected directories:", ucc_dirs)
+
+    if len(ori_dirs) == 0 or len(ucc_dirs) == 0:
+        raise RuntimeError('Found 0 image pairs in given directories.')
+
     # Create model
     model = PhysicalNN()
+    model = nn.DataParallel(model)
+    model = model.to(device)  # Move model to device
+    torch.backends.cudnn.benchmark = True
 
     # Define optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -42,11 +48,12 @@ def main():
     criterion = nn.MSELoss()
 
     # Load data
-    trainset = uwcc(ori_dirs, ucc_dirs, train=True)
-    trainloader = DataLoader(trainset, batchsize, shuffle=True, num_workers=n_workers)
+    trainset = UWCCDataset(ori_dirs, ucc_dirs, train=True)
+    trainloader = DataLoader(trainset, batch_size, shuffle=True, num_workers=num_workers)  # Adjust num_workers
 
     # Train
     for epoch in range(epochs):
+
         tloss = train(trainloader, model, optimizer, criterion, epoch)
 
         print('Epoch:[{}/{}] Loss{}'.format(epoch, epochs, tloss))
@@ -56,9 +63,10 @@ def main():
         save_checkpoint({
             'epoch': epoch + 1,
             'state_dict': model.state_dict(),
-            'optimizer': optimizer.state_dict(),
+            'optimizer' : optimizer.state_dict(),
         }, is_best)
     print('Best Loss: ', best_loss)
+
 
 def train(trainloader, model, optimizer, criterion, epoch):
     losses = AverageMeter()
@@ -66,10 +74,16 @@ def train(trainloader, model, optimizer, criterion, epoch):
 
     for i, sample in enumerate(trainloader):
         ori, ucc = sample
+        ori = ori.to(device)  # Move data to device
+        ucc = ucc.to(device)
+
+        # Resize images to a consistent size
+        ori = torch.nn.functional.interpolate(ori, size=(480, 640), mode='bilinear', align_corners=False)
+        ucc = torch.nn.functional.interpolate(ucc, size=(480, 640), mode='bilinear', align_corners=False)
 
         corrected = model(ori)
         loss = criterion(corrected, ucc)
-        losses.update(loss)
+        losses.update(loss.item(), ori.size(0))
 
         optimizer.zero_grad()
         loss.backward()
@@ -78,7 +92,7 @@ def train(trainloader, model, optimizer, criterion, epoch):
 
 def save_checkpoint(state, is_best):
     freq = 500
-    epoch = state['epoch'] 
+    epoch = state['epoch']
 
     filename = './checkpoints/model_tmp.pth.tar'
     if not os.path.exists('./checkpoints'):
