@@ -8,15 +8,23 @@ from torchvision import transforms
 import datetime
 import math
 
+def is_image_file(filename):
+    """Check if a file is a valid image file."""
+    try:
+        with Image.open(filename) as img:
+            img.verify()
+        return True
+    except (IOError, SyntaxError) as e:
+        return False
 
 def main(checkpoint, imgs_path, result_path):
-
     ori_dirs = []
-    for image in os.listdir(imgs_path):
-        ori_dirs.append(os.path.join(imgs_path, image))
+    for item in os.listdir(imgs_path):
+        item_path = os.path.join(imgs_path, item)
+        if os.path.isfile(item_path) and is_image_file(item_path):  # Check if item is a valid image file
+            ori_dirs.append(item_path)
 
     # Check for GPU
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Load model
@@ -50,9 +58,7 @@ def main(checkpoint, imgs_path, result_path):
     endtime = datetime.datetime.now()
     print(endtime-starttime)
 
-
 if __name__ == '__main__':
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--checkpoint', help='checkpoints path', required=True)
     parser.add_argument(
